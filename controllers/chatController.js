@@ -68,10 +68,21 @@ const getChatHistory = async (req, res, next) => {
     const lawn = await Lawn.findById(lawnId);
     if (!lawn) return res.status(404).json({ message: "Lawn not found" });
 
+    const { customerId } = req.query;
     let filter;
     if (userRole === "owner") {
-      // Owner sees ALL conversations for this lawn
-      filter = { lawnId };
+      // Owner sees conversation with specific user if provided
+      if (customerId) {
+        filter = {
+          lawnId,
+          $or: [
+            { senderId: userId, receiverId: customerId },
+            { senderId: customerId, receiverId: userId },
+          ],
+        };
+      } else {
+        filter = { lawnId };
+      }
     } else {
       // User sees only their conversation with the owner
       filter = {
@@ -115,14 +126,17 @@ const getConversations = async (req, res, next) => {
       .populate("lawnId",     "name city photos ownerId")
       .sort({ timestamp: -1 });
 
-    // Group by lawnId — keep only latest message per lawn conversation
+    // Group by lawnId and otherUserId
     const conversationMap = new Map();
     for (const msg of messages) {
-      const lawnKey = msg.lawnId?._id?.toString();
+      const otherUserId = msg.senderId._id.toString() === userId.toString() ? msg.receiverId._id : msg.senderId._id;
+      const lawnKey = `${msg.lawnId?._id?.toString()}_${otherUserId.toString()}`;
+
       if (lawnKey && !conversationMap.has(lawnKey)) {
-        // Count unread messages for this user in this lawn
+        // Count unread messages for this user in this lawn from the other user
         const unread = await Message.countDocuments({
           lawnId:     msg.lawnId._id,
+          senderId:   otherUserId,
           receiverId: userId,
           isRead:     false,
         });
