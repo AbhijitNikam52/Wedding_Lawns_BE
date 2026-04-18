@@ -1,5 +1,6 @@
 const cloudinary = require("../config/cloudinary");
 const Lawn       = require("../models/Lawn");
+const User       = require("../models/User");
 const streamifier = require("streamifier");
 
 // Helper: upload a buffer to Cloudinary via stream
@@ -157,4 +158,69 @@ const reorderPhotos = async (req, res, next) => {
   }
 };
 
-module.exports = { uploadLawnPhotos, deleteLawnPhoto, reorderPhotos };
+// ─── @route  POST /api/upload/profile-photo ──────────────
+// ─── @access Private
+const uploadProfilePhoto = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Please select an image" });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Delete existing old profile photo if any (optional but good for cleanup)
+    if (user.profileImage) {
+      try {
+        const urlParts = user.profileImage.split("/");
+        const uploadIdx = urlParts.indexOf("upload");
+        const startIdx = urlParts[uploadIdx + 1]?.startsWith("v")
+          ? uploadIdx + 2
+          : uploadIdx + 1;
+        const publicIdWithExt = urlParts.slice(startIdx).join("/");
+        const publicId = publicIdWithExt.replace(/\.[^/.]+$/, "");
+        
+        // Prevent deleting default images if we use any from other sources
+        if (publicId && publicId.includes("weddingLawn")) {
+           await cloudinary.uploader.destroy(publicId);
+        }
+      } catch (err) {
+        console.error("Error deleting old profile photo from Cloudinary", err);
+      }
+    }
+
+    // Upload to Cloudinary
+    const result = await uploadToCloudinary(
+      req.file.buffer,
+      `weddingLawn/users/${user._id}`
+    );
+
+    user.profileImage = result.secure_url;
+    await user.save({ validateBeforeSave: false });
+
+    // Send back full user info to match format
+    res.status(200).json({
+      success: true,
+      message: "Profile photo updated successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        profileImage: user.profileImage
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  uploadLawnPhotos,
+  deleteLawnPhoto,
+  reorderPhotos,
+  uploadProfilePhoto,
+};

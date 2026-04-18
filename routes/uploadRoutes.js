@@ -7,6 +7,7 @@ const {
   uploadLawnPhotos,
   deleteLawnPhoto,
   reorderPhotos,
+  uploadProfilePhoto,
 } = require("../controllers/uploadController");
 
 // POST   /api/upload/lawn-photos/:lawnId  — upload up to 10 images
@@ -32,6 +33,14 @@ router.put(
   protect,
   authorizeRoles("owner"),
   reorderPhotos
+);
+
+// POST   /api/upload/profile-photo — upload user profile photo
+router.post(
+  "/profile-photo",
+  protect,
+  upload.single("photo"),
+  uploadProfilePhoto
 );
 
 module.exports = router;
