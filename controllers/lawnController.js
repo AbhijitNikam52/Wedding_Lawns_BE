@@ -1,4 +1,5 @@
 const Lawn = require("../models/Lawn");
+const geocodeAddress = require("../utils/geocode");
 
 // ─── @route  GET /api/lawns ───────────────────────────────
 // ─── @access Public
@@ -11,15 +12,15 @@ const getAllLawns = async (req, res, next) => {
       maxPrice,
       minCapacity,
       amenities,
-      sort  = "createdAt",
-      page  = 1,
+      sort = "createdAt",
+      page = 1,
       limit = 12,
     } = req.query;
 
     // Build filter — only show admin-approved lawns publicly
     const filter = { isApproved: true };
 
-    if (city)        filter.city     = { $regex: city, $options: "i" };
+    if (city) filter.city = { $regex: city, $options: "i" };
     if (minCapacity) filter.capacity = { $gte: Number(minCapacity) };
     if (minPrice || maxPrice) {
       filter.pricePerDay = {};
@@ -31,7 +32,7 @@ const getAllLawns = async (req, res, next) => {
       filter.amenities = { $all: list };
     }
 
-    const skip  = (Number(page) - 1) * Number(limit);
+    const skip = (Number(page) - 1) * Number(limit);
     const total = await Lawn.countDocuments(filter);
 
     const lawns = await Lawn.find(filter)
@@ -43,7 +44,7 @@ const getAllLawns = async (req, res, next) => {
     res.status(200).json({
       success: true,
       total,
-      page:  Number(page),
+      page: Number(page),
       pages: Math.ceil(total / Number(limit)),
       lawns,
     });
@@ -74,15 +75,23 @@ const createLawn = async (req, res, next) => {
     const { name, city, address, capacity, pricePerDay, description, amenities } = req.body;
 
     const lawn = await Lawn.create({
-      ownerId:     req.user._id,
+      ownerId: req.user._id,
       name,
       city,
       address,
       capacity,
       pricePerDay,
       description: description || "",
-      amenities:   amenities   || [],
+      amenities: amenities || [],
     });
+
+    // Geocode the address in background (non-blocking)
+    const fullAddress = `${address}, ${city}`;
+    geocodeAddress(fullAddress).then(async (geo) => {
+      if (geo) {
+        await Lawn.findByIdAndUpdate(lawn._id, { location: geo });
+      }
+    }).catch(() => { });
 
     res.status(201).json({
       success: true,
@@ -107,11 +116,21 @@ const updateLawn = async (req, res, next) => {
     }
 
     const allowed = ["name", "city", "address", "capacity", "pricePerDay", "description", "amenities"];
+    const addressChanged = req.body.address || req.body.city;
+
     allowed.forEach((field) => {
       if (req.body[field] !== undefined) lawn[field] = req.body[field];
     });
 
     await lawn.save();
+
+    // Re-geocode if address or city changed
+    if (addressChanged) {
+      const fullAddress = `${lawn.address}, ${lawn.city}`;
+      geocodeAddress(fullAddress).then(async (geo) => {
+        if (geo) await Lawn.findByIdAndUpdate(lawn._id, { location: geo });
+      }).catch(() => { });
+    }
 
     res.status(200).json({ success: true, message: "Lawn updated successfully", lawn });
   } catch (error) {
