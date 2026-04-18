@@ -41,6 +41,10 @@ const userSchema = new mongoose.Schema(
     // Password reset (set when user requests forgot-password)
     resetPasswordToken:   { type: String, default: undefined },
     resetPasswordExpire:  { type: Date,   default: undefined },
+    profileImage: {
+      type: String,
+      default: "",
+    },
   },
   { timestamps: true }
 );

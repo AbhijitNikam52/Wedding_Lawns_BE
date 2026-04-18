@@ -35,11 +35,17 @@ connectDB();
 const app    = express();
 const server = http.createServer(app);   // HTTP server (needed for Socket.io)
 
+// ─── CORS Origins Setup ──────────────────────────────────
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(",").map((o) => o.trim())
+  : ["http://localhost:5173"];
+
 // ─── Socket.io Setup ─────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin:  process.env.CLIENT_URL,
-    methods: ["GET", "POST"],
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "OPTIONS"],
+    credentials: true,
   },
 });
 
@@ -75,10 +81,6 @@ const limiter = rateLimit({
 app.use("/api", limiter);
 
 // ─── CORS ─────────────────────────────────────────────────
-const allowedOrigins = (process.env.CLIENT_URL)
-  .split(",")
-  .map((o) => o.trim());
-
 app.use(
   cors({
     origin: (origin, cb) => {
