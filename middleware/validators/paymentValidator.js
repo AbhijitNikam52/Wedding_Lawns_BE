@@ -5,6 +5,7 @@ const createOrderSchema = Joi.object({
   bookingId: Joi.string().required().messages({
     "any.required": "bookingId is required",
   }),
+  amount: Joi.number().optional().min(1),
 });
 
 // ─── Verify payment signature ─────────────────────────────
