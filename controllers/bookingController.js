@@ -52,6 +52,9 @@ const createBooking = async (req, res, next) => {
       eventDate:       midnight,
       status:          "pending",
       totalAmount:     lawn.pricePerDay,
+      paidAmount:      0,
+      remainingAmount: lawn.pricePerDay,
+      paymentStatus:   "unpaid",
       guestCount:      guestCount      || 0,
       specialRequests: specialRequests || "",
     });

@@ -48,6 +48,10 @@ const lawnSchema = new mongoose.Schema(
       type: Boolean,
       default: false, // Admin must approve before going live
     },
+    isRejected: {
+      type: Boolean,
+      default: false, // Admin rejection marker
+    },
     rating: {
       type: Number,
       default: 0,
@@ -68,6 +72,7 @@ const lawnSchema = new mongoose.Schema(
 lawnSchema.index({ city: 1 });
 lawnSchema.index({ pricePerDay: 1 });
 lawnSchema.index({ isApproved: 1 });
+lawnSchema.index({ isRejected: 1 });
 lawnSchema.index({ ownerId: 1 });
 
 module.exports = mongoose.model("Lawn", lawnSchema);

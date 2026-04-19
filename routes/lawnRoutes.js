@@ -13,6 +13,9 @@ const {
   getMyLawns,
   getPendingLawns,
   approveLawn,
+  unapproveLawn,
+  getRejectedLawns,
+  rejectLawn,
 } = require("../controllers/lawnController");
 
 // ── Public ────────────────────────────────────────────────
@@ -54,11 +57,29 @@ router.get(
   authorizeRoles("admin"),
   getPendingLawns
 );
+router.get(
+  "/admin/rejected",
+  protect,
+  authorizeRoles("admin"),
+  getRejectedLawns
+);
 router.put(
   "/admin/:id/approve",
   protect,
   authorizeRoles("admin"),
   approveLawn
+);
+router.put(
+  "/admin/:id/unapprove",
+  protect,
+  authorizeRoles("admin"),
+  unapproveLawn
+);
+router.put(
+  "/admin/:id/reject",
+  protect,
+  authorizeRoles("admin"),
+  rejectLawn
 );
 
 module.exports = router;

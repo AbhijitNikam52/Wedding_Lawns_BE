@@ -13,6 +13,7 @@ const getStats = async (req, res, next) => {
       totalLawns,
       pendingLawns,
       approvedLawns,
+      rejectedLawns,
       totalBookings,
       pendingBookings,
       confirmedBookings,
@@ -24,8 +25,9 @@ const getStats = async (req, res, next) => {
       User.countDocuments({ role: "user" }),
       User.countDocuments({ role: "owner" }),
       Lawn.countDocuments(),
-      Lawn.countDocuments({ isApproved: false }),
+      Lawn.countDocuments({ isApproved: false, isRejected: false }),
       Lawn.countDocuments({ isApproved: true }),
+      Lawn.countDocuments({ isRejected: true }),
       Booking.countDocuments(),
       Booking.countDocuments({ status: "pending" }),
       Booking.countDocuments({ status: "confirmed" }),
@@ -73,7 +75,7 @@ const getStats = async (req, res, next) => {
       success: true,
       stats: {
         users:    { total: totalUsers,  owners: totalOwners },
-        lawns:    { total: totalLawns,  pending: pendingLawns, approved: approvedLawns },
+        lawns:    { total: totalLawns,  pending: pendingLawns, approved: approvedLawns, rejected: rejectedLawns },
         bookings: {
           total:     totalBookings,
           pending:   pendingBookings,

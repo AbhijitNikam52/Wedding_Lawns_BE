@@ -37,12 +37,37 @@ const createOrder = async (req, res, next) => {
       });
     }
 
-    if (booking.paymentId) {
-      return res.status(400).json({ message: "This booking is already paid" });
+    if (booking.paymentStatus === "paid") {
+      return res.status(400).json({ message: "This booking is already fully paid" });
+    }
+
+    // Optional amount passed from frontend (for advance booking)
+    // If not provided, default to remainingAmount
+    let { amount } = req.body;
+    
+    // Robust remaining calculation: use remainingAmount if it is a number, else fallback to totalAmount
+    const remaining = (typeof booking.remainingAmount === 'number' && booking.remainingAmount >= 0)
+      ? booking.remainingAmount 
+      : booking.totalAmount;
+
+    console.log(`[CreateOrder] Booking: ${bookingId}, Status: ${booking.status}, Total: ${booking.totalAmount}, Remaining: ${remaining}, Requested: ${amount}`);
+
+    if (!amount) {
+      amount = remaining;
+    } else {
+      amount = Number(amount);
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ message: "Invalid payment amount. Amount must be greater than 0." });
+      }
+      if (amount > remaining) {
+        return res.status(400).json({
+          message: `Amount ₹${amount.toLocaleString()} exceeds remaining balance of ₹${remaining.toLocaleString()}`,
+        });
+      }
     }
 
     // Amount in paise (Razorpay requires smallest currency unit)
-    const amountInPaise = booking.totalAmount * 100;
+    const amountInPaise = amount * 100;
 
     // Create Razorpay order
     const order = await razorpay.orders.create({
@@ -61,7 +86,7 @@ const createOrder = async (req, res, next) => {
       bookingId,
       razorpayOrderId:   order.id,
       razorpayPaymentId: "",
-      amount:            booking.totalAmount,
+      amount:            amount,
       currency:          "INR",
       status:            "created",
     });
@@ -132,12 +157,26 @@ const verifyPayment = async (req, res, next) => {
       return res.status(404).json({ message: "Payment record not found" });
     }
 
-    // 2. Link payment to booking + keep status as confirmed (already confirmed by owner)
-    const booking = await Booking.findByIdAndUpdate(
-      bookingId,
-      { $set: { paymentId: payment._id } },
-      { new: true }
-    )
+    // 2. Update booking: add to paidAmount, reduce remainingAmount, update status
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    const newPaidAmount = (booking.paidAmount || 0) + payment.amount;
+    const newRemaining  = booking.totalAmount - newPaidAmount;
+    const newPayStatus  = newRemaining <= 0 ? "paid" : "partial";
+
+    await Booking.findByIdAndUpdate(bookingId, {
+      $set: {
+        paymentId:       payment._id,
+        paidAmount:      newPaidAmount,
+        remainingAmount: newRemaining < 0 ? 0 : newRemaining,
+        paymentStatus:   newPayStatus,
+      },
+    });
+
+    const refreshedBooking = await Booking.findById(bookingId)
       .populate("lawnId", "name city")
       .populate("userId", "name email");
 
@@ -147,22 +186,24 @@ const verifyPayment = async (req, res, next) => {
 
     // 3. Send payment success email to user
     sendEmail(
-      booking.userId.email,
-      "Payment Successful — WeddingLawn 💍",
+      refreshedBooking.userId.email,
+      "Payment Receipt — WeddingLawn 💍",
       paymentSuccessEmail(
-        booking.userId.name,
-        booking.lawnId.name,
-        booking.eventDate,
+        refreshedBooking.userId.name,
+        refreshedBooking.lawnId.name,
+        refreshedBooking.eventDate,
+        refreshedBooking.totalAmount,
         payment.amount,
+        refreshedBooking.remainingAmount,
         razorpayPaymentId
       )
     ).catch((e) => console.error("Email error:", e.message));
 
     res.status(200).json({
       success: true,
-      message: "Payment verified and booking confirmed!",
+      message: "Payment verified successfully!",
       payment,
-      booking,
+      booking: refreshedBooking,
     });
   } catch (error) {
     next(error);
