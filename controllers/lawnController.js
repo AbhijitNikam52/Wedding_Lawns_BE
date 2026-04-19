@@ -1,5 +1,6 @@
 const Lawn = require("../models/Lawn");
 const geocodeAddress = require("../utils/geocode");
+const { sendLawnApprovalNotification } = require("../utils/telegramBot");
 
 // ─── @route  GET /api/lawns ───────────────────────────────
 // ─── @access Public
@@ -177,7 +178,7 @@ const getMyLawns = async (req, res, next) => {
 // ─── @access Admin only
 const getPendingLawns = async (req, res, next) => {
   try {
-    const lawns = await Lawn.find({ isApproved: false })
+    const lawns = await Lawn.find({ isApproved: false, isRejected: false })
       .populate("ownerId", "name email")
       .sort({ createdAt: -1 });
 
@@ -193,13 +194,66 @@ const approveLawn = async (req, res, next) => {
   try {
     const lawn = await Lawn.findByIdAndUpdate(
       req.params.id,
-      { isApproved: true },
+      { isApproved: true, isRejected: false },
       { new: true }
     );
 
     if (!lawn) return res.status(404).json({ message: "Lawn not found" });
 
+    // Send a telegram notification that the lawn is approved and live
+    await sendLawnApprovalNotification(lawn);
+
     res.status(200).json({ success: true, message: "Lawn approved and now live", lawn });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── @route  PUT /api/lawns/admin/:id/unapprove ──────────
+// ─── @access Admin only
+const unapproveLawn = async (req, res, next) => {
+  try {
+    const lawn = await Lawn.findByIdAndUpdate(
+      req.params.id,
+      { isApproved: false, isRejected: false },
+      { new: true }
+    );
+
+    if (!lawn) return res.status(404).json({ message: "Lawn not found" });
+
+    res.status(200).json({ success: true, message: "Lawn reverted to pending state", lawn });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── @route  GET /api/lawns/admin/rejected ────────────────
+// ─── @access Admin only
+const getRejectedLawns = async (req, res, next) => {
+  try {
+    const lawns = await Lawn.find({ isRejected: true })
+      .populate("ownerId", "name email")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({ success: true, count: lawns.length, lawns });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ─── @route  PUT /api/lawns/admin/:id/reject ──────────────
+// ─── @access Admin only
+const rejectLawn = async (req, res, next) => {
+  try {
+    const lawn = await Lawn.findByIdAndUpdate(
+      req.params.id,
+      { isApproved: false, isRejected: true },
+      { new: true }
+    );
+
+    if (!lawn) return res.status(404).json({ message: "Lawn not found" });
+
+    res.status(200).json({ success: true, message: "Lawn rejected", lawn });
   } catch (error) {
     next(error);
   }
@@ -214,4 +268,7 @@ module.exports = {
   getMyLawns,
   getPendingLawns,
   approveLawn,
+  unapproveLawn,
+  getRejectedLawns,
+  rejectLawn,
 };

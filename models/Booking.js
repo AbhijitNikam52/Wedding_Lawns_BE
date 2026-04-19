@@ -25,6 +25,19 @@ const bookingSchema = new mongoose.Schema(
       type:     Number,
       required: true,
     },
+    paidAmount: {
+      type:    Number,
+      default: 0,
+    },
+    remainingAmount: {
+      type:    Number,
+      default: 0,
+    },
+    paymentStatus: {
+      type:    String,
+      enum:    ["unpaid", "partial", "paid"],
+      default: "unpaid",
+    },
     guestCount: {
       type:    Number,
       default: 0,
