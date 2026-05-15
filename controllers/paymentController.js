@@ -4,7 +4,7 @@ const Booking  = require("../models/Booking");
 const Payment  = require("../models/Payment");
 const Lawn     = require("../models/Lawn");
 const sendEmail = require("../utils/sendEmail");
-const { paymentSuccessEmail } = require("../utils/emailTemplates");
+const { paymentSuccessEmail, paymentOwnerNotificationEmail } = require("../utils/emailTemplates");
 
 // Initialise Razorpay instance
 const razorpay = new Razorpay({
@@ -177,7 +177,11 @@ const verifyPayment = async (req, res, next) => {
     });
 
     const refreshedBooking = await Booking.findById(bookingId)
-      .populate("lawnId", "name city")
+      .populate({
+        path: "lawnId",
+        select: "name city ownerId",
+        populate: { path: "ownerId", select: "name email" }
+      })
       .populate("userId", "name email");
 
     if (!booking) {
@@ -197,7 +201,23 @@ const verifyPayment = async (req, res, next) => {
         refreshedBooking.remainingAmount,
         razorpayPaymentId
       )
-    ).catch((e) => console.error("Email error:", e.message));
+    ).catch((e) => console.error("Email error (User):", e.message));
+
+    // 4. Send payment notification to owner
+    if (refreshedBooking.lawnId?.ownerId?.email) {
+      sendEmail(
+        refreshedBooking.lawnId.ownerId.email,
+        "💰 Payment Received — WeddingLawn",
+        paymentOwnerNotificationEmail(
+          refreshedBooking.lawnId.ownerId.name,
+          refreshedBooking.userId.name,
+          refreshedBooking.lawnId.name,
+          payment.amount,
+          refreshedBooking.remainingAmount,
+          razorpayPaymentId
+        )
+      ).catch((e) => console.error("Email error (Owner):", e.message));
+    }
 
     res.status(200).json({
       success: true,
