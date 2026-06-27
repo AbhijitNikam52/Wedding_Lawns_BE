@@ -18,7 +18,7 @@ const toMidnight = (d) => {
 // ─── @access User only
 const createBooking = async (req, res, next) => {
   try {
-    const { lawnId, eventDate, guestCount, specialRequests } = req.body;
+    const { lawnId, eventDate, guestCount, specialRequests, bookingItems } = req.body;
 
     // 1. Check lawn exists and is approved
     const lawn = await Lawn.findById(lawnId).populate("ownerId", "name email");
@@ -45,36 +45,58 @@ const createBooking = async (req, res, next) => {
       return res.status(409).json({ message: "This date already has an active booking" });
     }
 
+    // Calculate total price securely on server
+    const items = bookingItems || { venue: true, catering: false, decoration: false, selectedDecorations: [] };
+    let calculatedTotal = 0;
+    if (items.venue) {
+      calculatedTotal += lawn.pricePerDay;
+    }
+    if (items.catering && lawn.catering?.available) {
+      calculatedTotal += (lawn.catering.pricePerPlate || 0) * (guestCount || 0);
+    }
+    if (items.decoration && lawn.decoration?.available) {
+      calculatedTotal += (lawn.decoration.basePrice || 0);
+      if (items.selectedDecorations && Array.isArray(items.selectedDecorations)) {
+        items.selectedDecorations.forEach(decorName => {
+          const found = lawn.decoration.types?.find(t => t.name === decorName);
+          if (found) {
+            calculatedTotal += (found.price || 0);
+          }
+        });
+      }
+    }
+
     // 4. Create booking
     const booking = await Booking.create({
       lawnId,
       userId:          req.user._id,
       eventDate:       midnight,
       status:          "pending",
-      totalAmount:     lawn.pricePerDay,
+      totalAmount:     calculatedTotal,
       paidAmount:      0,
-      remainingAmount: lawn.pricePerDay,
+      remainingAmount: calculatedTotal,
       paymentStatus:   "unpaid",
       guestCount:      guestCount      || 0,
       specialRequests: specialRequests || "",
+      bookingItems:    items,
     });
 
     // 5. Email user — booking request sent
     sendEmail(
       req.user.email,
       "Booking Request Sent — WeddingLawn 💍",
-      bookingCreatedEmail(req.user.name, lawn.name, midnight, lawn.pricePerDay)
+      bookingCreatedEmail(req.user.name, lawn.name, midnight, booking.totalAmount)
     ).catch((e) => console.error("Email error:", e.message));
 
     // 6. Email owner — new booking request arrived
     sendEmail(
       lawn.ownerId.email,
       `New Booking Request for ${lawn.name} — WeddingLawn`,
-      newBookingOwnerEmail(lawn.ownerId.name, lawn.name, req.user.name, midnight, lawn.pricePerDay)
+      newBookingOwnerEmail(lawn.ownerId.name, lawn.name, req.user.name, midnight, booking.totalAmount)
     ).catch((e) => console.error("Email error:", e.message));
 
     const populated = await booking.populate([
-      { path: "lawnId", select: "name city pricePerDay photos" },
+      { path: "lawnId", select: "name city pricePerDay photos catering decoration" },
       { path: "userId", select: "name email phone" },
     ]);
 
@@ -93,7 +115,7 @@ const createBooking = async (req, res, next) => {
 const getMyBookings = async (req, res, next) => {
   try {
     const bookings = await Booking.find({ userId: req.user._id })
-      .populate("lawnId", "name city photos pricePerDay address")
+      .populate("lawnId", "name city photos pricePerDay address catering decoration")
       .populate("userId", "name email")
       .sort({ createdAt: -1 });
 
@@ -116,7 +138,7 @@ const getOwnerBookings = async (req, res, next) => {
     if (status) filter.status = status;
 
     const bookings = await Booking.find(filter)
-      .populate("lawnId", "name city photos pricePerDay")
+      .populate("lawnId", "name city photos pricePerDay catering decoration")
       .populate("userId", "name email phone")
       .sort({ createdAt: -1 });
 
@@ -131,7 +153,7 @@ const getOwnerBookings = async (req, res, next) => {
 const getBookingById = async (req, res, next) => {
   try {
     const booking = await Booking.findById(req.params.id)
-      .populate("lawnId",  "name city address photos pricePerDay ownerId")
+      .populate("lawnId",  "name city address photos pricePerDay ownerId catering decoration")
       .populate("userId",  "name email phone")
       .populate("paymentId");
 
