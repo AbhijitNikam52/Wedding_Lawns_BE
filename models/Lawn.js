@@ -40,6 +40,21 @@ const lawnSchema = new mongoose.Schema(
       default: [],
       // e.g. ["AC", "Parking", "Catering", "Generator", "Sound System"]
     },
+    catering: {
+      available: { type: Boolean, default: false },
+      pricePerPlate: { type: Number, default: 0 },
+      description: { type: String, default: "" },
+    },
+    decoration: {
+      available: { type: Boolean, default: false },
+      basePrice: { type: Number, default: 0 },
+      types: [
+        {
+          name: { type: String, required: true },
+          price: { type: Number, default: 0 },
+        }
+      ]
+    },
     description: {
       type: String,
       default: "",

@@ -1,5 +1,30 @@
 const Joi = require("joi");
 
+// Helper schemas
+const cateringSchema = Joi.object({
+  available: Joi.boolean().required(),
+  pricePerPlate: Joi.number().min(0).allow("").optional(),
+  description: Joi.string().allow("").optional(),
+});
+
+const decorationSchema = Joi.object({
+  available: Joi.boolean().required(),
+  basePrice: Joi.number().min(0).allow("").optional(),
+  types: Joi.array().items(
+    Joi.object({
+      name: Joi.string().required(),
+      price: Joi.number().min(0).optional(),
+      _id: Joi.string().optional(), // allow Mongoose ObjectId if updating
+    })
+  ).optional(),
+});
+
+const locationSchema = Joi.object({
+  lat: Joi.number().allow(null).optional(),
+  lng: Joi.number().allow(null).optional(),
+  formattedAddress: Joi.string().allow("").optional(),
+});
+
 // ─── Create / Update Lawn ─────────────────────────────────
 const lawnSchema = Joi.object({
   name: Joi.string().min(3).max(100).required().messages({
@@ -24,7 +49,10 @@ const lawnSchema = Joi.object({
   }),
   description: Joi.string().max(1000).allow("").optional(),
   amenities:   Joi.array().items(Joi.string()).optional(),
-  // photos handled separately via upload route
+  catering:    cateringSchema.optional(),
+  decoration:  decorationSchema.optional(),
+  location:    locationSchema.optional(),
+  photos:      Joi.array().items(Joi.string()).optional(),
 });
 
 // ─── Update (all fields optional) ────────────────────────
@@ -36,6 +64,24 @@ const lawnUpdateSchema = Joi.object({
   pricePerDay: Joi.number().min(0).optional(),
   description: Joi.string().max(1000).allow("").optional(),
   amenities:   Joi.array().items(Joi.string()).optional(),
+  catering: Joi.object({
+    available: Joi.boolean().optional(),
+    pricePerPlate: Joi.number().min(0).allow("").optional(),
+    description: Joi.string().allow("").optional(),
+  }).optional(),
+  decoration: Joi.object({
+    available: Joi.boolean().optional(),
+    basePrice: Joi.number().min(0).allow("").optional(),
+    types: Joi.array().items(
+      Joi.object({
+        name: Joi.string().optional(),
+        price: Joi.number().min(0).optional(),
+        _id: Joi.string().optional(),
+      })
+    ).optional(),
+  }).optional(),
+  location:    locationSchema.optional(),
+  photos:      Joi.array().items(Joi.string()).optional(),
 });
 
 module.exports = { lawnSchema, lawnUpdateSchema };
