@@ -73,7 +73,9 @@ const getLawnById = async (req, res, next) => {
 // ─── @access Owner only
 const createLawn = async (req, res, next) => {
   try {
-    const { name, city, address, capacity, pricePerDay, description, amenities } = req.body;
+    const { name, city, address, capacity, pricePerDay, description, amenities, catering, decoration, location } = req.body;
+
+    const hasCoordinates = location && typeof location.lat === "number" && typeof location.lng === "number";
 
     const lawn = await Lawn.create({
       ownerId: req.user._id,
@@ -84,15 +86,20 @@ const createLawn = async (req, res, next) => {
       pricePerDay,
       description: description || "",
       amenities: amenities || [],
+      catering: catering || { available: false, pricePerPlate: 0, description: "" },
+      decoration: decoration || { available: false, basePrice: 0, types: [] },
+      location: hasCoordinates ? location : { lat: null, lng: null, formattedAddress: "" }
     });
 
-    // Geocode the address in background (non-blocking)
-    const fullAddress = `${address}, ${city}`;
-    geocodeAddress(fullAddress).then(async (geo) => {
-      if (geo) {
-        await Lawn.findByIdAndUpdate(lawn._id, { location: geo });
-      }
-    }).catch(() => { });
+    // Geocode the address in background if coordinates are missing
+    if (!hasCoordinates) {
+      const fullAddress = `${address}, ${city}`;
+      geocodeAddress(fullAddress).then(async (geo) => {
+        if (geo) {
+          await Lawn.findByIdAndUpdate(lawn._id, { location: geo });
+        }
+      }).catch(() => { });
+    }
 
     res.status(201).json({
       success: true,
@@ -116,8 +123,9 @@ const updateLawn = async (req, res, next) => {
       return res.status(403).json({ message: "Not authorized to update this lawn" });
     }
 
-    const allowed = ["name", "city", "address", "capacity", "pricePerDay", "description", "amenities"];
+    const allowed = ["name", "city", "address", "capacity", "pricePerDay", "description", "amenities", "catering", "decoration", "photos", "location"];
     const addressChanged = req.body.address || req.body.city;
+    const locationPassed = req.body.location && typeof req.body.location.lat === "number" && typeof req.body.location.lng === "number";
 
     allowed.forEach((field) => {
       if (req.body[field] !== undefined) lawn[field] = req.body[field];
@@ -125,8 +133,8 @@ const updateLawn = async (req, res, next) => {
 
     await lawn.save();
 
-    // Re-geocode if address or city changed
-    if (addressChanged) {
+    // Re-geocode if address or city changed AND location was not passed in body
+    if (!locationPassed && addressChanged) {
       const fullAddress = `${lawn.address}, ${lawn.city}`;
       geocodeAddress(fullAddress).then(async (geo) => {
         if (geo) await Lawn.findByIdAndUpdate(lawn._id, { location: geo });

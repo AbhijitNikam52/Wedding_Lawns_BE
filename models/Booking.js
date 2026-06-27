@@ -46,6 +46,12 @@ const bookingSchema = new mongoose.Schema(
       type:    String,
       default: "",
     },
+    bookingItems: {
+      venue: { type: Boolean, default: true },
+      catering: { type: Boolean, default: false },
+      decoration: { type: Boolean, default: false },
+      selectedDecorations: [{ type: String }],
+    },
     paymentId: {
       type:    mongoose.Schema.Types.ObjectId,
       ref:     "Payment",
